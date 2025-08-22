@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 // Helpers to create persistent keys
-const makeDSAKey = (p: { number: number; title: string }) => `dsa:${p.number}:${p.title}`;
+const makeDSAKey = (p: { number: string; title: string }) => `dsa:${p.number}:${p.title}`;
 const makeSDKey = (weekNum: number, dayNum: number, index: number) => `sd:${weekNum}:${dayNum}:${index}`;
 
 type CompletionMap = Record<string, boolean>;
@@ -16,8 +16,8 @@ export default function Home() {
     number: number;
     days: Array<{
       number: number;
-      dsa_problems: Array<{ number: number; title: string; difficulty: string; url: string }>;
-      system_design_tasks: Array<{ description: string; is_bonus?: boolean }>;
+      dsa_problems: Array<{ number: string; title: string; difficulty: string; url: string }>;
+      system_design_tasks: Array<{ description: string; is_bonus: boolean }>;
     }>;
   }>;
 
