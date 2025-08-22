@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   /* Base palette tuned for low eye strain */
@@ -11,13 +13,6 @@
   --accent-1: #7aa2f7; /* soft blue */
   --accent-2: #a78bfa; /* soft violet */
   --accent-3: #34d399; /* emerald */
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: light) {
