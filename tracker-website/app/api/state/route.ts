@@ -56,10 +56,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const completion = (body?.completion || {}) as Record<string, boolean>;
-  const updatedAt = typeof body?.updatedAt === 'number' ? body.updatedAt : Date.now();
+  const incomingCompletion = (body?.completion || {}) as Record<string, boolean>;
 
-  await setState(uid, { completion, updatedAt });
+  // --- FIX STARTS HERE ---
+  // 1. Get the current state from the database first
+  const currentState = await getState(uid);
+  const currentCompletion = currentState?.completion || {};
+
+  // 2. Merge the incoming changes on top of the current state
+  const newCompletion = {
+    ...currentCompletion,
+    ...incomingCompletion,
+  };
+  // --- FIX ENDS HERE ---
+
+  // Always use the server's timestamp for the update
+  const updatedAt = Date.now();
+
+  // 3. Save the newly merged state
+  await setState(uid, { completion: newCompletion, updatedAt });
 
   return NextResponse.json({ ok: true, updatedAt });
 }
