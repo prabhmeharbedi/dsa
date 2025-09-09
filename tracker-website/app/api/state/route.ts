@@ -1,80 +1,91 @@
 import { NextResponse } from 'next/server';
-// Removed: import { cookies } from 'next/headers';
 
-// Optional: Vercel KV for production persistence
-let hasKV = !!process.env.KV_REST_API_URL && !!process.env.KV_REST_API_TOKEN;
-
-// Lazy import to avoid errors when env not provided in dev
-let kv: any = null;
-if (hasKV) {
+// Ensure Vercel KV is only imported when environment variables are set
+let kv: any;
+if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    kv = require('@vercel/kv');
-  } catch {
-    hasKV = false;
+    kv = require('@vercel/kv').kv;
+  } catch (error) {
+    console.error('Failed to load @vercel/kv:', error);
+    kv = null;
   }
 }
 
-// In-memory fallback for local dev (non-persistent across restarts)
-const memoryStore = new Map<string, { completion: Record<string, boolean>; updatedAt: number }>();
+// In-memory fallback for local dev or if KV fails to initialize
+const memoryStore = new Map<string, any>();
 
-// Use a single global UID so your progress is identical across all devices
-// Set TRACKER_GLOBAL_UID in your environment to customize the key; defaults to 'global'
-const GLOBAL_UID = process.env.TRACKER_GLOBAL_UID || 'global';
+// Use a single global UID so progress is identical across all devices
+const GLOBAL_UID = process.env.TRACKER_GLOBAL_UID || 'global-tracker-state';
+const KEY = `tracker:${GLOBAL_UID}`;
 
-const KEY = (uid: string) => `tracker:${uid}`;
-
-async function getState(uid: string) {
-  if (hasKV && kv?.kv) {
-    const data = await kv.kv.get(KEY(uid));
-    return (data as any) || null;
+async function getState() {
+  if (kv) {
+    try {
+      const data = await kv.get(KEY);
+      console.log(`[API GET] Fetched from KV for key "${KEY}". Data exists: ${!!data}`);
+      return data || null;
+    } catch (error) {
+      console.error('[API GET] Error fetching from KV:', error);
+      return null; // Return null on error
+    }
   }
-  return memoryStore.get(uid) || null;
+  // Fallback for local development
+  const memoryData = memoryStore.get(KEY);
+  console.log(`[API GET] Fetched from memoryStore. Data exists: ${!!memoryData}`);
+  return memoryData || null;
 }
 
-async function setState(uid: string, value: { completion: Record<string, boolean>; updatedAt: number }) {
-  if (hasKV && kv?.kv) {
-    await kv.kv.set(KEY(uid), value);
+async function setState(value: any) {
+  if (kv) {
+    try {
+      await kv.set(KEY, value);
+      console.log(`[API SET] Successfully set data in KV for key "${KEY}".`);
+    } catch (error) {
+      console.error('[API SET] Error setting data in KV:', error);
+    }
     return;
   }
-  memoryStore.set(uid, value);
+  // Fallback for local development
+  memoryStore.set(KEY, value);
+  console.log(`[API SET] Set data in memoryStore.`);
 }
 
 export async function GET() {
-  const uid = GLOBAL_UID;
-  const data = (await getState(uid)) || { completion: {}, updatedAt: Date.now() };
-  return NextResponse.json(data);
+  console.log('[API GET] Received GET request.');
+  const data = await getState();
+  // Always return a valid structure
+  return NextResponse.json(data || { completion: {}, updatedAt: Date.now() });
 }
 
 export async function POST(req: Request) {
-  const uid = GLOBAL_UID;
-
-  let body: any = null;
+  console.log('[API POST] Received POST request.');
+  let body: any;
   try {
     body = await req.json();
   } catch {
+    console.error('[API POST] Invalid JSON in request body.');
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
   const incomingCompletion = (body?.completion || {}) as Record<string, boolean>;
+  console.log(`[API POST] Received ${Object.keys(incomingCompletion).length} completion keys from client.`);
 
-  // --- FIX STARTS HERE ---
-  // 1. Get the current state from the database first
-  const currentState = await getState(uid);
+  // --- MERGE LOGIC ---
+  const currentState = await getState();
   const currentCompletion = currentState?.completion || {};
+  console.log(`[API POST] Current state in DB has ${Object.keys(currentCompletion).length} keys.`);
 
-  // 2. Merge the incoming changes on top of the current state
   const newCompletion = {
     ...currentCompletion,
     ...incomingCompletion,
   };
-  // --- FIX ENDS HERE ---
+  console.log(`[API POST] Merged state now has ${Object.keys(newCompletion).length} keys.`);
 
-  // Always use the server's timestamp for the update
   const updatedAt = Date.now();
-
-  // 3. Save the newly merged state
-  await setState(uid, { completion: newCompletion, updatedAt });
+  await setState({ completion: newCompletion, updatedAt });
 
   return NextResponse.json({ ok: true, updatedAt });
 }
+
+// This forces the API route to be dynamic and not cached
+export const dynamic = 'force-dynamic';
